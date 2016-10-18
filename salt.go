@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"github.com/google/go-querystring/query"
+	"github.com/ghodss/yaml"
 )
 
 // Request represents a single request made to the Salt API
@@ -80,5 +81,10 @@ func (s *Salt) Run(target string, function string, arguments string) (string, er
 
 	body, _ := ioutil.ReadAll(resp.Body)
 
-	return string(body), nil
+	y, err := yaml.JSONToYAML(body)
+    if err != nil {
+        return "", err
+    }
+
+	return string(y), nil
 }
