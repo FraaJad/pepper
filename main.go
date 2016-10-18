@@ -9,6 +9,7 @@ import (
 	"github.com/lunixbochs/go-keychain"
 	"github.com/urfave/cli"
 	"github.com/howeyc/gopass"
+	"github.com/ghodss/yaml"
 )
 
 func main() {
@@ -42,6 +43,11 @@ func main() {
 			Usage:  "Salt authentication method.",
 			EnvVar: "SALT_AUTH",
 		},
+		cli.BoolFlag{
+			Name:   "yaml, Y",
+			Usage:  "Output as YAML.",
+			EnvVar: "SALT_YAML",
+		},
 	}
 	app.Action = func(c *cli.Context) error {
 		if len(c.Args()) < 2 {
@@ -64,28 +70,31 @@ func main() {
 			password = string(pwd)
 		}
 
-		// Save the password to the macOS keychain 
+		// Try to save the password to the macOS keychain 
 		// if it was read from stdin
 		if c.Bool("stdin") == true && runtime.GOOS == "darwin" {
 			keychain.Remove("pepper", username)
-			err := keychain.Add("pepper", username, password)
-			fmt.Println(err)
+			keychain.Add("pepper", username, password)
 		}
 
 		// Try getting the password from the macOS Keychain
+		var keychainpwd string
 		if runtime.GOOS == "darwin" && c.Bool("stdin") == false {
    			keychainpwd, err := keychain.Find("pepper", username)
    			if err == nil {
    				password = keychainpwd
    			}
-   			fmt.Println(err)
 		}
 
 		salt := NewSalt(hostname)
 
 		err := salt.Login(username, password, auth)
 		if err != nil {
-			log.Fatal(err)
+			if keychainpwd != "" {
+				log.Fatal("Using macOS keychain\n", err)
+			} else {
+				log.Fatal(err)
+			}
 		}
 
 		target := c.Args().Get(0)
@@ -93,7 +102,20 @@ func main() {
 		arguments := c.Args().Get(2)
 
 		response, _ := salt.Run(target, function, arguments)
-		fmt.Println(response)
+
+		// Convert output to YAML if flagged
+		var output string
+		if c.Bool("yaml") {
+			y, err := yaml.JSONToYAML(response)
+			output = string(y)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			output = string(response)
+		}
+
+		fmt.Println(output)
 		return nil
 	}
 
